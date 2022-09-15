@@ -10,5 +10,6 @@ urlpatterns = [
     path('projects-list/', views.fetch_projects, name ="fetch-projects"),
     path('create-project/', views.create_project, name="create-project"),
     path('project/<str:pk>', views.fetch_project_by_id, name="project-by-id"),
-    path('issue-status/<str:id>', views.update_issue_status, name="update-issue-status")
+    path('issue-status/<str:id>', views.update_issue_status, name="update-issue-status"),
+    path('issue/<str:issue_id>/logs', views.fetch_issue_log, name="issue-logs")
 ]

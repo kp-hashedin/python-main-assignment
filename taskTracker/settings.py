@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'accounts',
     'comments',
     'labels',
+    'logs',
 ]
 
 MIDDLEWARE = [

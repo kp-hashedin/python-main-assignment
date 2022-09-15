@@ -14,6 +14,7 @@ from backend import serializers
 import sys
 sys.path.append("..")
 from backend.models import Issue
+from logs.views import create_entry
 
 
 @api_view(['POST'])
@@ -60,7 +61,7 @@ def single_comment_operations(request, pk):
         return Response({
             "error": "comment doesn't exist"
         }, status = status.HTTP_400_BAD_REQUEST)
-        
+    current_comment_value = current_comment.comment 
     if request.method == 'PATCH':
         if current_comment.commented_by != str(request.user):
             return Response({
@@ -72,6 +73,17 @@ def single_comment_operations(request, pk):
         serializer = CommentSerializer(current_comment, data= data, partial= True)
         if serializer.is_valid():
             serializer.save()
+            
+            # This payload will take care of Event Logs
+            # Will make entry inside Logs Table
+            payload_for_log = {
+                "issue_id": current_comment.issue_id,
+                "updated_field": "Comment",
+                "previous_value": current_comment_value,
+                "updated_value": request.data['comment']
+            }
+            create_entry(payload_for_log)
+            
             return Response(serializer.data)
         return Response(serializer.errors, status= status.HTTP_400_BAD_REQUEST)
         
