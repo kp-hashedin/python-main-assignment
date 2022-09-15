@@ -17,6 +17,48 @@ from backend import serializers
 User = get_user_model()
 
 
+# Issue's Status List
+issues_status_list = ["Open", "In Progress", "In Review", "Code Complete", "Done"]
+
+def get_possible_status(current_status):
+    if current_status == "Open":
+        return ["In Progress"]
+    elif current_status == "In Progress":
+        return ["Open", "In Review"]
+    elif current_status == "In Review":
+        return ["Open", "Code Complete"]
+    elif current_status == "Code Complete":
+        return ["Open", "Done"]
+    else:
+        return []
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_issue_status(request, id):
+    """
+    Update status of an issue
+    Open -> InProgress -> In Review -> Code Complete -> Done
+    Follow Sequentially, or Open
+    """
+    current_issue = Issue.get_issue_by_issue_id(id)
+    possible_status = get_possible_status(current_issue.current_status)
+    
+    if request.data['updated_status'] in possible_status:
+        data = {
+            "current_status": request.data['updated_status']
+        }
+        serializer = IssueSerializer(current_issue, data = data, partial= True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        
+    return Response({
+        "error": "Allowed status are" + str(possible_status)
+    }, status=status.HTTP_406_NOT_ACCEPTABLE)
+    
+    
+
 # Issue API's
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
