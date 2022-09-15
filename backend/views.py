@@ -1,11 +1,10 @@
-from wsgiref.util import request_uri
-from xmlrpc.client import ResponseError
-from django.shortcuts import render
-from django.http import JsonResponse
 from rest_framework import status
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+
+from logs.serializers import LogsSerializer
+from logs.views import create_entry
 from .serializers import IssueSerializer, ProjectSerializer
 
 from .models import Issue, Project
@@ -13,9 +12,59 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
 
 from backend import serializers
+import sys
+sys.path.append('..')
+from logs.models import Logs
+from logs.serializers import LogsSerializer
 
 User = get_user_model()
 
+
+# Issue's Status List
+issues_status_list = ["Open", "In Progress", "In Review", "Code Complete", "Done"]
+
+def get_possible_status(current_status):
+    if current_status == "Open":
+        return ["In Progress"]
+    elif current_status == "In Progress":
+        return ["Open", "In Review"]
+    elif current_status == "In Review":
+        return ["Open", "Code Complete"]
+    elif current_status == "Code Complete":
+        return ["Open", "Done"]
+    else:
+        return []
+    
+    
+# Issue's alterable fields
+issues_alterable_fields = ["title", "desc", "issue_type", "assignee_id", "current_status"]
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_issue_status(request, id):
+    """
+    Update status of an issue
+    Open -> InProgress -> In Review -> Code Complete -> Done
+    Follow Sequentially, or Open
+    """
+    current_issue = Issue.get_issue_by_issue_id(id)
+    possible_status = get_possible_status(current_issue.current_status)
+    
+    if request.data['updated_status'] in possible_status:
+        data = {
+            "current_status": request.data['updated_status']
+        }
+        serializer = IssueSerializer(current_issue, data = data, partial= True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        
+    return Response({
+        "error": "Allowed status are" + str(possible_status)
+    }, status=status.HTTP_406_NOT_ACCEPTABLE)
+    
+    
 
 # Issue API's
 @api_view(['GET'])
@@ -89,6 +138,19 @@ def single_issue_operations(request, pk):
         serializer = IssueSerializer(issue, data= request.data)
         if serializer.is_valid():
             if issue.reporter_id == request.data['reporter_id']:
+                
+                # Added entry into Logs
+                issue_dict = vars(issue)
+                for field in issues_alterable_fields:
+                    if issue_dict[field] != request.data[field]:
+                        payload_for_logs ={
+                            "issue_id": pk,
+                            "updated_field": field,
+                            "previous_value":issue_dict[field],
+                            "updated_value": request.data[field]
+                        }
+                        create_entry(payload_for_logs)
+                
                 serializer.save()
                 return Response(serializer.data, status = status.HTTP_201_CREATED)
             return Response({
@@ -110,7 +172,19 @@ def fetch_issue_by_title(request, pk):
     serializer = IssueSerializer(instance= issues, many=True)
     return Response(serializer.data)
 
-
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def fetch_issue_log(request, issue_id):
+    """
+    Retrive logs of an existing issue
+    """
+    logs = Logs.get_logs_by_issue_id(issue_id)
+    serializer = LogsSerializer(logs, many=True)
+    return Response({
+        "response": serializer.data
+    }, status = status.HTTP_201_CREATED)
+        
+    
 # Project API's
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
