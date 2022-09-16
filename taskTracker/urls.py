@@ -22,5 +22,7 @@ urlpatterns = [
     path('service/', include('backend.urls')),
     path('', include('accounts.urls')),
     path('', include('comments.urls')),
-    path('', include('labels.urls'))
+    path('', include('labels.urls')),
+    path('', include('watchers.urls')),
+    path('', include('worklogs.urls'))
 ]
