@@ -19,6 +19,10 @@ class Issue(models.Model):
     @classmethod
     def get_issue_by_issue_id(cls, id):
         return cls.objects.filter(issue_id = id).first()
+    
+    @classmethod
+    def get_issue_by_status(cls, curr_status):
+        return cls.objects.filter(current_status = curr_status).all()
 
     
 
