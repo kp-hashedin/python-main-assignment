@@ -5,6 +5,8 @@ from rest_framework.response import Response
 
 from logs.serializers import LogsSerializer
 from logs.views import create_entry
+from watchers.models import Watcher
+from watchers.views import create_watcher
 from .serializers import IssueSerializer, ProjectSerializer
 
 from .models import Issue, Project
@@ -16,6 +18,7 @@ import sys
 sys.path.append('..')
 from logs.models import Logs
 from logs.serializers import LogsSerializer
+from mailing_service.email_main import send_email
 
 User = get_user_model()
 
@@ -141,8 +144,11 @@ def single_issue_operations(request, pk):
                 
                 # Added entry into Logs
                 issue_dict = vars(issue)
+                
+                list_of_updated_fields = []
                 for field in issues_alterable_fields:
                     if issue_dict[field] != request.data[field]:
+                        list_of_updated_fields.append(field)
                         payload_for_logs ={
                             "issue_id": pk,
                             "updated_field": field,
@@ -150,8 +156,15 @@ def single_issue_operations(request, pk):
                             "updated_value": request.data[field]
                         }
                         create_entry(payload_for_logs)
-                
+                message = "Hii, " +str(list_of_updated_fields) + " has been updated"  
+                watchers = Watcher.get_watcher_by_issue_id(pk)
+                lis_of_watchers = set()
+                for watcher in watchers:
+                    lis_of_watchers.add(watcher.user_id)
+                lis_of_watchers.add(issue.assignee_id) #Assignee will be default watcher
+                lis_of_watchers.add(issue.reporter_id) #Repoter will be default watcher
                 serializer.save()
+                send_email(lis_of_watchers, message)
                 return Response(serializer.data, status = status.HTTP_201_CREATED)
             return Response({
                 "error": "Reporter of Issue can not be chnaged"
@@ -183,6 +196,45 @@ def fetch_issue_log(request, issue_id):
     return Response({
         "response": serializer.data
     }, status = status.HTTP_201_CREATED)
+        
+        
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def add_watcher(request, issue_id):
+    try:
+        issue = Issue.get_issue_by_issue_id(issue_id)
+    except Exception as e:
+        return Response({
+            'error': 'Issue does not exist'
+        }, status = status.HTTP_400_BAD_REQUEST)
+    if request.method == 'POST':
+        payload_for_watcher = {
+            "issue_id": issue_id,
+            "user_id": request.data['username']
+        }
+        
+        resp = create_watcher(payload_for_watcher)
+        if resp.status_code == 201:
+            return Response({
+                "message": "Watcher added successfully"
+            }, status= status.HTTP_201_CREATED )
+        else:
+            return Response({
+                "error": "Something went wrong"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'GET':
+        watchers = Watcher.get_watcher_by_issue_id(issue_id)
+        issue = Issue.get_issue_by_issue_id(issue_id)
+        lis_of_watchers = set()
+        for watcher in watchers:
+            lis_of_watchers.add(watcher.user_id)
+        lis_of_watchers.add(issue.assignee_id) # Assignee will be default watcher
+        lis_of_watchers.add(issue.reporter_id) #Reporter will be default watcher
+        return Response({
+            "resp": lis_of_watchers
+        }, status= status.HTTP_200_OK)
+        
         
     
 # Project API's
